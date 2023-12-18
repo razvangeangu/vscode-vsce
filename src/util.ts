@@ -172,7 +172,8 @@ export function patchOptionsWithManifest(options: any, manifest: Manifest): void
 	}
 
 	for (const key of Object.keys(manifest.vsce)) {
-		const optionsKey = key === 'yarn' ? 'useYarn' : key;
+		let optionsKey = key === 'yarn' ? 'useYarn' : key;
+		optionsKey = key === 'pnpm' ? 'usePnpm' : key;
 
 		if (options[optionsKey] === undefined) {
 			options[optionsKey] = manifest.vsce[key];

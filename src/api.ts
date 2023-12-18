@@ -7,7 +7,7 @@ import { packageCommand, listFiles as _listFiles, IPackageOptions } from './pack
  */
 export type IBaseVSIXOptions = Pick<
 	IPackageOptions,
-	'baseContentUrl' | 'baseImagesUrl' | 'githubBranch' | 'gitlabBranch' | 'useYarn' | 'target' | 'preRelease'
+	'baseContentUrl' | 'baseImagesUrl' | 'githubBranch' | 'gitlabBranch' | 'useYarn' | 'target' | 'preRelease' | 'usePnpm'
 >;
 
 /**
@@ -23,6 +23,7 @@ export type ICreateVSIXOptions = Pick<IPackageOptions, 'cwd' | 'packagePath'> & 
 export enum PackageManager {
 	Npm,
 	Yarn,
+	Pnpm,
 	None,
 }
 
@@ -84,6 +85,7 @@ export function listFiles(options: IListFilesOptions = {}): Promise<string[]> {
 	return _listFiles({
 		...options,
 		useYarn: options.packageManager === PackageManager.Yarn,
+		usePnpm: options.packageManager === PackageManager.Pnpm,
 		dependencies: options.packageManager !== PackageManager.None,
 	});
 }

@@ -20,7 +20,7 @@ import {
 	validateEngineCompatibility,
 	validateVSCodeTypesCompatibility,
 } from './validation';
-import { detectYarn, getDependencies, SourceAndDestination } from './npm';
+import { detectPnpm, detectYarn, getDependencies, SourceAndDestination } from './npm';
 import * as GitHost from 'hosted-git-info';
 import parseSemver from 'parse-semver';
 import * as jsonc from 'jsonc-parser';
@@ -134,6 +134,10 @@ export interface IPackageOptions {
 	 */
 	readonly baseImagesUrl?: string;
 
+	/**
+	 * Should use PNPM instead of NPM.
+	 */
+	readonly usePnpm?: boolean;
 	/**
 	 * Should use Yarn instead of NPM.
 	 */
@@ -1560,6 +1564,8 @@ const defaultIgnore = [
 	'**/*.vsixmanifest',
 	'**/.vscode-test/**',
 	'**/.vscode-test-web/**',
+	'pnpm-lock.yaml',
+	'pnpmfile.cjs'
 ];
 
 const notIgnored = ['!package.json', '!README.md'];
@@ -1567,7 +1573,7 @@ const notIgnored = ['!package.json', '!README.md'];
 async function collectAllFiles(
 	cwd: string,
 	manifest: Manifest,
-	dependencies: 'npm' | 'yarn' | 'none' | undefined,
+	dependencies: 'npm' | 'yarn' | 'pnpm' | 'none' | undefined,
 	dependencyEntryPoints?: string[]
 ): Promise<SourceAndDestination[]> {
 	const deps = await getDependencies(cwd, manifest, dependencies, dependencyEntryPoints);
@@ -1583,19 +1589,18 @@ async function collectAllFiles(
 	return Promise.all(promises).then(util.flatten);
 }
 
-function getDependenciesOption(options: IPackageOptions): 'npm' | 'yarn' | 'none' | undefined {
+function getDependenciesOption(options: IPackageOptions): 'npm' | 'yarn' | 'pnpm' | 'none' | undefined {
 	if (options.dependencies === false) {
 		return 'none';
 	}
 
-	switch (options.useYarn) {
-		case true:
-			return 'yarn';
-		case false:
-			return 'npm';
-		default:
-			return undefined;
+	if (options.useYarn) {
+		return 'yarn';
+	} else if (options.usePnpm) {
+		return 'pnpm';
 	}
+
+	return 'npm';
 }
 
 function collectFiles(
@@ -1757,7 +1762,7 @@ function getDefaultPackageName(manifest: Manifest, options: IPackageOptions): st
 	return `${manifest.name}-${version}.vsix`;
 }
 
-export async function prepublish(cwd: string, manifest: Manifest, useYarn?: boolean): Promise<void> {
+export async function prepublish(cwd: string, manifest: Manifest, useYarn?: boolean, usePnpm?: boolean): Promise<void> {
 	if (!manifest.scripts || !manifest.scripts['vscode:prepublish']) {
 		return;
 	}
@@ -1766,7 +1771,18 @@ export async function prepublish(cwd: string, manifest: Manifest, useYarn?: bool
 		useYarn = await detectYarn(cwd);
 	}
 
-	console.log(`Executing prepublish script '${useYarn ? 'yarn' : 'npm'} run vscode:prepublish'...`);
+	if (usePnpm === undefined) {
+		usePnpm = await detectPnpm(cwd);
+	}
+
+	let tool = 'npm';
+	if (useYarn) {
+		tool = 'yarn';
+	} else if (usePnpm) {
+		tool = 'pnpm';
+	}
+
+	console.log(`Executing prepublish script '${tool} run vscode:prepublish'...`);
 
 	await new Promise<void>((c, e) => {
 		const tool = useYarn ? 'yarn' : 'npm';
@@ -1821,7 +1837,7 @@ export async function packageCommand(options: IPackageOptions = {}): Promise<any
 	const manifest = await readManifest(cwd);
 	util.patchOptionsWithManifest(options, manifest);
 
-	await prepublish(cwd, manifest, options.useYarn);
+	await prepublish(cwd, manifest, options.useYarn, options.usePnpm);
 	await versionBump(options);
 
 	const { packagePath, files } = await pack(options);
@@ -1844,6 +1860,7 @@ export async function packageCommand(options: IPackageOptions = {}): Promise<any
 export interface IListFilesOptions {
 	readonly cwd?: string;
 	readonly useYarn?: boolean;
+	readonly usePnpm?: boolean;
 	readonly packagedDependencies?: string[];
 	readonly ignoreFile?: string;
 	readonly dependencies?: boolean;
@@ -1858,7 +1875,7 @@ export async function listFiles(options: IListFilesOptions = {}): Promise<string
 	const manifest = await readManifest(cwd);
 
 	if (options.prepublish) {
-		await prepublish(cwd, manifest, options.useYarn);
+		await prepublish(cwd, manifest, options.useYarn, options.usePnpm);
 	}
 
 	const files = await collectFiles(cwd, manifest, options);

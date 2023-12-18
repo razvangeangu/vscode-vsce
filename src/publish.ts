@@ -47,6 +47,10 @@ export interface IPublishOptions {
 	readonly baseImagesUrl?: string;
 
 	/**
+	 * Should use PNPM instead of NPM.
+	 */
+	readonly usePnpm?: boolean;
+	/**
 	 * Should use Yarn instead of NPM.
 	 */
 	readonly useYarn?: boolean;
@@ -114,7 +118,7 @@ export async function publish(options: IPublishOptions = {}): Promise<any> {
 		const manifest = await readManifest(cwd);
 		patchOptionsWithManifest(options, manifest);
 
-		await prepublish(cwd, manifest, options.useYarn);
+		await prepublish(cwd, manifest, options.useYarn, options.usePnpm);
 		await versionBump(options);
 
 		if (options.targets) {

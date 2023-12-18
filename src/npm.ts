@@ -78,6 +78,20 @@ function getNpmDependencies(cwd: string): Promise<SourceAndDestination[]> {
 			}));
 }
 
+function getPnpmDependencies(cwd: string): Promise<SourceAndDestination[]> {
+	return checkNPM()
+		.then(() =>
+			exec('pnpm list --production --parseable --depth=99999 --loglevel=error', { cwd, maxBuffer: 5000 * 1024 })
+		)
+		.then(({ stdout }) => stdout.split(/[\r\n]/).filter(dir => path.isAbsolute(dir))
+			.map(dir => {
+				return {
+					src: dir,
+					dest: path.relative(cwd, dir)
+				}
+			}));
+}
+
 export interface YarnDependency {
 	name: string;
 	path: SourceAndDestination;
@@ -224,10 +238,24 @@ export async function detectYarn(root: string) {
 	return false;
 }
 
+export async function detectPnpm(root: string) {
+	for (const name of ['pnpm-lock.yaml', '.pnpmfile.cjs']) {
+		if (await exists(path.join(root, name))) {
+			if (!process.env['VSCE_TESTS']) {
+				log.info(
+					`Detected presence of ${name}. Using 'pnpm' instead of 'npm' (to override this pass '--no-pnpm' on the command line).`
+				);
+			}
+			return true;
+		}
+	}
+	return false;
+}
+
 export async function getDependencies(
 	cwd: string,
 	manifest: Manifest,
-	dependencies: 'npm' | 'yarn' | 'none' | undefined,
+	dependencies: 'npm' | 'yarn' | 'pnpm' | 'none' | undefined,
 	packagedDependencies?: string[]
 ): Promise<SourceAndDestination[]> {
 	const root = findWorkspaceRoot(cwd) || cwd;
@@ -236,6 +264,8 @@ export async function getDependencies(
 		return [{ src: root, dest: '' }];
 	} else if (dependencies === 'yarn' || (dependencies === undefined && (await detectYarn(root)))) {
 		return await getYarnDependencies(cwd, root, manifest, packagedDependencies);
+	} else if (dependencies === 'pnpm' || (dependencies === undefined && (await detectPnpm(root)))) {
+		return await getPnpmDependencies(cwd);
 	} else {
 		return await getNpmDependencies(cwd);
 	}
